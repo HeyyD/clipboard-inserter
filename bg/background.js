@@ -31,6 +31,24 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 });
 
+async function ensureOffscreenDoc() {
+  const exists = await chrome.offscreen.hasDocument();
+  if (!exists) {
+    await chrome.offscreen.createDocument({
+      url: "bg/offscreen.html",
+      reasons: [chrome.offscreen.Reason.CLIPBOARD],
+      justification: "Read clipboard in background without interfering with user focus"
+    });
+  }
+}
+
+chrome.runtime.onMessage.addListener((msg, sender) => {
+  if (msg.type === "clipboardContent") {
+    notifyForeground(msg.text)
+  }
+});
+
+
 function toggleTab(id) {
   const index = listeningTabs.indexOf(id)
   if (index >= 0) {
@@ -64,10 +82,9 @@ function uninject(id) {
   chrome.tabs.sendMessage(id, { action: "uninject" })
 }
 
-function checkClipboard() {
-  for (const id of listeningTabs) {
-    chrome.tabs.sendMessage(id, { action: "checkClipboard", options });
-  }
+async function checkClipboard() {
+  await ensureOffscreenDoc()
+  chrome.runtime.sendMessage({ action: "checkClipboard" });
 }
 
 function updateTimer() {
