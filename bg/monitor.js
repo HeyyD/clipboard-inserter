@@ -21,8 +21,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
 })
 
 chrome.action.onClicked.addListener(() => {
-    chrome.tabs.query({ active: true, currentWindow: true },
-	([t]) => toggleTab(t.id))
+    chrome.tabs.query({ active: true, currentWindow: true }, ([t]) => toggleTab(t.id))
 })
 
 function toggleTab(id) {
