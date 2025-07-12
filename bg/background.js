@@ -28,7 +28,7 @@ chrome.action.onClicked.addListener(() => {
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.action === "clipboardContent" && msg.text) {
-    notifyForeground(id, content)
+    notifyForeground(msg.text)
   }
 });
 
@@ -51,10 +51,14 @@ function toggleTab(id) {
     }
 }
 
-function notifyForeground(id, text) {
-  chrome.tabs.sendMessage(id, {
-    action: "insert", text, options
-  })
+function notifyForeground(text) {
+  for (const tabId of listeningTabs) {
+    chrome.tabs.sendMessage(tabId, {
+      action: "insert",
+      text: text,
+      options
+    });
+  }
 }
 
 function uninject(id) {
