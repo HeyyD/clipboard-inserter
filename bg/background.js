@@ -1,6 +1,5 @@
 console.log('Service worker loaded')
 
-// Load default options
 importScripts('/default-options.js');
 
 let listeningTabs = []
