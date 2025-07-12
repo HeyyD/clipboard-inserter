@@ -14,6 +14,12 @@ function checkClipboard() {
   }
 }
 
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg.action === "checkClipboard") {
+    checkClipboard()
+  }
+});
+
 function init() {
   const pasteTarget = document.createElement("div");
   pasteTarget.id = "paste-target";
@@ -22,12 +28,6 @@ function init() {
   pasteTarget.addEventListener("paste", (e) => {
     if (e.clipboardData.getData("text/plain") === "") {
       e.preventDefault();
-    }
-  });
-
-  chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-    if (msg.action === "checkClipboard") {
-      checkClipboard()
     }
   });
 }
