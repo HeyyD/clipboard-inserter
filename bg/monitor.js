@@ -20,18 +20,10 @@ chrome.storage.onChanged.addListener((changes, area) => {
     }
 })
 
-chrome.browserAction.onClicked.addListener(() => {
+chrome.action.onClicked.addListener(() => {
     chrome.tabs.query({ active: true, currentWindow: true },
 	([t]) => toggleTab(t.id))
 })
-
-window.onload = () => {
-    document.querySelector("#paste-target").addEventListener("paste", e => {
-	if(e.clipboardData.getData("text/plain") === "") {
-	    e.preventDefault() // prevent anything that is not representable as plain text from being pasted
-	}
-    })
-}
 
 function toggleTab(id) {
     const index = listeningTabs.indexOf(id)
@@ -39,13 +31,16 @@ function toggleTab(id) {
 	uninject(id)
 	listeningTabs.splice(index, 1)
 	updateTimer()
-	chrome.browserAction.setBadgeText({ text: "", tabId: id })
+	chrome.action.setBadgeText({ text: "", tabId: id })
     } else {
-	chrome.tabs.executeScript({file: "/fg/insert.js"})
+	chrome.scripting.executeScript({
+	  target: { tabId: id },
+	  files: ["/fg/insert.js"]
+	})
 	listeningTabs.push(id)
 	updateTimer()
-	chrome.browserAction.setBadgeBackgroundColor({ color: "green", tabId: id })
-	chrome.browserAction.setBadgeText({ text: "ON", tabId: id })
+	chrome.action.setBadgeBackgroundColor({ color: "green", tabId: id })
+	chrome.action.setBadgeText({ text: "ON", tabId: id })
     }
 }
 
