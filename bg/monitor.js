@@ -1,93 +1,115 @@
-console.log("I'm alive")
+console.log('Service worker loaded')
 
-let previousContent = ""
+importScripts('/default-options.js');
+
 let listeningTabs = []
 let timer = null
 let options = defaultOptions
+let isOffScreenLoaded = false
 
 chrome.storage.local.get(defaultOptions,
-    o => options = o)
+  o => options = o)
 
 chrome.storage.onChanged.addListener((changes, area) => {
-    if(area === "local") {
-	const optionKeys = Object.keys(options)
-	for(key of Object.keys(changes)) {
-	    if(optionKeys.indexOf(key) >= 0) {
-		options[key] = changes[key].newValue
-	    }
-	}
-	updateTimer()
+  if (area === "local") {
+    const optionKeys = Object.keys(options)
+    for (key of Object.keys(changes)) {
+      if (optionKeys.indexOf(key) >= 0) {
+        options[key] = changes[key].newValue
+      }
     }
+    updateTimer()
+  }
 })
 
-chrome.browserAction.onClicked.addListener(() => {
-    chrome.tabs.query({ active: true, currentWindow: true },
-	([t]) => toggleTab(t.id))
+chrome.action.onClicked.addListener(() => {
+  chrome.tabs.query({ active: true, currentWindow: true }, ([t]) => toggleTab(t.id))
 })
 
-window.onload = () => {
-    document.querySelector("#paste-target").addEventListener("paste", e => {
-	if(e.clipboardData.getData("text/plain") === "") {
-	    e.preventDefault() // prevent anything that is not representable as plain text from being pasted
-	}
-    })
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg.action === "clipboardContent" && msg.text) {
+    notifyForeground(msg.text)
+  }
+});
+
+async function ensureOffscreenDoc() {
+  const exists = await chrome.offscreen.hasDocument();
+  if (!exists) {
+    await chrome.offscreen.createDocument({
+      url: "bg/offscreen.html",
+      reasons: [chrome.offscreen.Reason.CLIPBOARD],
+      justification: "Read clipboard in background without interfering with user focus"
+    });
+
+    isOffScreenLoaded = true
+  }
 }
+
+chrome.runtime.onMessage.addListener((msg, sender) => {
+  if (msg.type === "clipboardContent") {
+    notifyForeground(msg.text)
+  }
+});
+
 
 function toggleTab(id) {
-    const index = listeningTabs.indexOf(id)
-    if(index >= 0) {
-	uninject(id)
-	listeningTabs.splice(index, 1)
-	updateTimer()
-	chrome.browserAction.setBadgeText({ text: "", tabId: id })
-    } else {
-	chrome.tabs.executeScript({file: "/fg/insert.js"})
-	listeningTabs.push(id)
-	updateTimer()
-	chrome.browserAction.setBadgeBackgroundColor({ color: "green", tabId: id })
-	chrome.browserAction.setBadgeText({ text: "ON", tabId: id })
-    }
+  const index = listeningTabs.indexOf(id)
+  if (index >= 0) {
+    uninject(id)
+    listeningTabs.splice(index, 1)
+    updateTimer()
+    chrome.action.setBadgeText({ text: "", tabId: id })
+  } else {
+    chrome.scripting.executeScript({
+      target: { tabId: id },
+      files: ["/fg/insert.js"]
+    })
+    listeningTabs.push(id)
+    updateTimer()
+    chrome.action.setBadgeBackgroundColor({ color: "green", tabId: id })
+    chrome.action.setBadgeText({ text: "ON", tabId: id })
+  }
 }
 
-function notifyForeground(id, text) {
-    chrome.tabs.sendMessage(id, {
-	action: "insert", text, options
-    })
+function notifyForeground(text) {
+  for (const tabId of listeningTabs) {
+    chrome.tabs.sendMessage(tabId, {
+      action: "insert",
+      text: text,
+      options
+    });
+  }
 }
 
 function uninject(id) {
-    chrome.tabs.sendMessage(id, { action: "uninject" })
+  chrome.tabs.sendMessage(id, { action: "uninject" })
 }
 
-function checkClipboard() {
-    const pasteTarget = document.querySelector("#paste-target")
-    pasteTarget.innerText = ""
-    pasteTarget.focus()
-    document.execCommand("paste")
-    const content = pasteTarget.innerText
-    if(content.trim() !== previousContent.trim() && content != "") {
-	listeningTabs.forEach(id => notifyForeground(id, content))
-	previousContent = content
-    }
+async function checkClipboard() {
+  if (!isOffScreenLoaded) {
+    await ensureOffscreenDoc()
+  }
+  chrome.runtime.sendMessage({ action: "checkClipboard" });
 }
 
 function updateTimer() {
-    function stop() {
-	clearInterval(timer.id)
-	timer = null
+  function stop() {
+    clearInterval(timer.id)
+    timer = null
+  }
+  function start() {
+    const id = setInterval(checkClipboard, options.monitorInterval)
+    timer = { id, interval: options.monitorInterval }
+  }
+
+  if (listeningTabs.length > 0) {
+    if (timer === null) {
+      start()
+    } else if (timer.interval !== options.monitorInterval) {
+      stop()
+      start()
     }
-    function start() {
-	const id = setInterval(checkClipboard, options.monitorInterval)
-	timer = { id, interval: options.monitorInterval }
-    }
-    if(listeningTabs.length > 0) {
-	if(timer === null) {
-	    start()
-	} else if(timer.interval !== options.monitorInterval) {
-	    stop()
-	    start()
-	}
-    } else {
-	stop()
-    }
+  } else {
+    stop()
+  }
 }
